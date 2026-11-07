@@ -75,6 +75,15 @@ tr.resigned td input{color:#999}
 .step:before{counter-increment:s;content:counter(s);width:24px;height:24px;border-radius:50%;background:var(--acc);color:#fff;display:flex;align-items:center;justify-content:center;font-weight:700;flex:none;font-size:13px}
 .hidden{display:none!important}
 a{color:var(--acc)}
+.grp{margin-bottom:12px}
+.grp h3{font-size:14px;margin:0 0 8px;display:flex;align-items:center;gap:8px}
+.grp h3 .chip{font-weight:600}
+.pcards{display:grid;grid-template-columns:repeat(auto-fill,minmax(230px,1fr));gap:8px}
+.pc{border:1px solid var(--line);border-radius:10px;padding:8px 10px;background:#fff}
+.pc b{display:block;font-size:13.5px}
+.pc .meta{font-size:12px;color:var(--mute);margin-top:2px}
+.tag{display:inline-block;font-size:11px;padding:1px 7px;border-radius:99px;background:#f0efeb;color:var(--mute);margin-right:4px}
+.tag.d{background:#eef3ff;color:#2948b8}.tag.o{background:var(--acc2);color:var(--acc)}.tag.rd{background:var(--rdbg);color:var(--rd)}
 </style>
 </head>
 <body>
@@ -82,6 +91,7 @@ a{color:var(--acc)}
   <h1>จัดกะ <span>WFM</span></h1>
   <nav id="nav">
     <button data-tab="emp" class="on">👥 พนักงาน</button>
+    <button data-tab="info">📋 ข้อมูลพนักงาน</button>
     <button data-tab="exp">📤 ส่งออกไฟล์</button>
     <button data-tab="set">⚙️ ตั้งค่า</button>
   </nav>
@@ -114,6 +124,21 @@ a{color:var(--acc)}
   </div>
   <div class="tblwrap"><table id="empTbl"></table></div>
   <p class="hint">💡 วันหยุดประจำสัปดาห์: กดตัวย่อวัน (อา จ อ พ พฤ ศ ส) เลือกได้มากกว่า 1 วัน · วันหยุดชดเชย 1–3 ใส่เป็นวันที่ (ใช้เฉพาะเดือนที่ตรงกัน) · ระบบบันทึกอัตโนมัติ</p>
+</section>
+
+<!-- ============ INFO ============ -->
+<section id="tab-info" class="hidden">
+  <div class="card">
+    <div class="row">
+      <div class="seg" id="infoMode"><button data-m="day" class="on">รายวัน</button><button data-m="list">รายชื่อทั้งหมด</button></div>
+      <div class="seg" id="infoType"><button data-t="all" class="on">ทั้งหมด</button><button data-t="ops">Ops</button><button data-t="driver">Driver</button></div>
+      <label class="row" style="gap:6px" id="infoDateWrap">วันที่ <input type="date" id="infoDate" class="in"></label>
+      <input id="infoQ" class="in" placeholder="ค้นหาชื่อ / รหัส / ตำแหน่ง" style="width:200px">
+      <div class="grow"></div>
+      <button class="btn" id="infoCopy">📋 คัดลอกข้อความ</button>
+    </div>
+  </div>
+  <div id="infoBody"></div>
 </section>
 
 <!-- ============ EXPORT ============ -->
@@ -194,7 +219,7 @@ a{color:var(--acc)}
 </section>
 </main>
 
-<datalist id="dlShift"></datalist><datalist id="dlDept"></datalist><datalist id="dlFunc"></datalist>
+<datalist id="dlPos"><option value="พนักงานขับรถ"><option value="Hub Agent"><option value="Senior Agent"><option value="Assist. Supervisor"><option value="Hub Supervisor"></datalist><datalist id="dlShift"></datalist><datalist id="dlDept"></datalist><datalist id="dlFunc"></datalist>
 
 <div class="pop" id="pop">
   <div class="ttl" id="popTtl"></div>
@@ -419,11 +444,14 @@ function repairEmp(e) {
   if (e.shift && !isShift(e.shift)) { const wd = parseWeekdays(e.shift); if (wd) { if (!e.offDays.length) e.offDays = wd; e.shift = ''; changed = true; } }
   return changed;
 }
+function defaultPos(e) { return e.type === 'driver' ? 'พนักงานขับรถ' + (e.func ? ` (${e.func})` : '') : (e.dept || 'พนักงานในฮับ'); }
+function position(e) { return (e.pos || '').trim() || defaultPos(e); }
+function shiftTime(code) { const m = String(code || '').match(/(\d{2})(\d{2})-(\d{2})(\d{2})/); if (!m) return null; const s = `${m[1]}:${m[2]}`, t = `${m[3]}:${m[4]}`; return { start: s, end: t, label: `${s}–${t}${t < s ? ' (+1)' : ''}` }; }
 /* ---------------- storage ---------------- */
 function emp(type, o = {}) {
   const s = D.settings;
   return Object.assign({ id: uid(), type, wid: '', empId: '', name: '', dept: type === 'ops' ? (s.defDept || '') : '', func: type === 'driver' ? (s.defFunc || '') : '', shift: s.defShift || '',
-    offDays: [], comp: ['', '', ''], status: 'active', startDate: '', resignDate: '', note: '' }, o);
+    offDays: [], comp: ['', '', ''], status: 'active', startDate: '', resignDate: '', note: '', pos: '' }, o);
 }
 let saveTimer = null;
 function touch() {
@@ -780,13 +808,14 @@ function renderEmp() {
   fillDatalists();
   const list = visibleEmps(), drv = curType === 'driver';
   const dup = new Map(); D.employees.filter(e => e.type === curType && e.wid.trim()).forEach(e => dup.set(e.wid.trim(), (dup.get(e.wid.trim()) || 0) + 1));
-  const head = `<thead><tr><th class="stk"><input type="checkbox" id="selAll"></th><th>#</th><th>${drv ? 'Driver ID' : 'Ops ID'}</th><th>Employee ID</th><th>ชื่อ-นามสกุล</th><th>${drv ? 'Function' : 'Department'}</th><th>กะทำงาน</th><th>วันหยุดประจำสัปดาห์</th><th>หยุดชดเชย 1</th><th>หยุดชดเชย 2</th><th>หยุดชดเชย 3</th><th>วันเริ่มงาน</th><th>สถานะ</th><th>วันที่ลาออก</th><th>หมายเหตุ</th><th></th></tr></thead>`;
+  const head = `<thead><tr><th class="stk"><input type="checkbox" id="selAll"></th><th>#</th><th>${drv ? 'Driver ID' : 'Ops ID'}</th><th>Employee ID</th><th>ชื่อ-นามสกุล</th><th>ตำแหน่ง</th><th>${drv ? 'Function' : 'Department'}</th><th>กะทำงาน</th><th>วันหยุดประจำสัปดาห์</th><th>หยุดชดเชย 1</th><th>หยุดชดเชย 2</th><th>หยุดชดเชย 3</th><th>วันเริ่มงาน</th><th>สถานะ</th><th>วันที่ลาออก</th><th>หมายเหตุ</th><th></th></tr></thead>`;
   const body = list.map((e, i) => `<tr data-id="${e.id}" class="${e.status === 'resigned' ? 'resigned' : ''}">
     <td class="stk"><input type="checkbox" data-sel ${selected.has(e.id) ? 'checked' : ''}></td>
     <td class="hint">${i + 1}</td>
     <td><input class="in" data-f="wid" value="${esc(e.wid)}" style="width:110px;${dup.get(e.wid.trim()) > 1 ? 'border-color:var(--bad)' : ''}" placeholder="${drv ? 'เช่น 10125' : 'เช่น Ops1234'}"></td>
     <td><input class="in" data-f="empId" value="${esc(e.empId)}" style="width:110px"></td>
     <td><input class="in" data-f="name" value="${esc(e.name)}" style="width:190px"></td>
+    <td><input class="in" data-f="pos" list="dlPos" value="${esc(e.pos || '')}" style="width:130px" placeholder="${esc(defaultPos(e))}"></td>
     <td><input class="in" data-f="${drv ? 'func' : 'dept'}" list="${drv ? 'dlFunc' : 'dlDept'}" value="${esc(drv ? e.func : e.dept)}" style="width:${drv ? 140 : 190}px;${drv && e.func && !isFunc(e.func) ? 'border-color:var(--bad)' : ''}"></td>
     <td><input class="in" data-f="shift" list="dlShift" value="${esc(e.shift)}" style="width:120px;${e.shift && !isShift(e.shift) ? 'border-color:var(--bad)' : ''}" placeholder="0700-1600"></td>
     <td><div class="wd">${wdButtons(e.offDays)}</div></td>
@@ -796,7 +825,7 @@ function renderEmp() {
     <td><input class="in" type="date" data-f="resignDate" value="${esc(e.resignDate)}" style="width:128px" ${e.status === 'resigned' ? '' : 'disabled'}></td>
     <td><input class="in" data-f="note" value="${esc(e.note)}" style="width:140px"></td>
     <td><button class="btn sm dan" data-del title="ลบออกจากรายชื่อ">✕</button></td></tr>`).join('');
-  $('#empTbl').innerHTML = head + `<tbody>${body || `<tr><td colspan="16" style="padding:30px;text-align:center" class="hint">ยังไม่มี${drv ? 'คนขับ' : 'พนักงาน'} — กด "+ เพิ่มพนักงาน", "วางจาก Excel" หรือ "นำเข้าจากไฟล์ FMS"</td></tr>`}</tbody>`;
+  $('#empTbl').innerHTML = head + `<tbody>${body || `<tr><td colspan="17" style="padding:30px;text-align:center" class="hint">ยังไม่มี${drv ? 'คนขับ' : 'พนักงาน'} — กด "+ เพิ่มพนักงาน", "วางจาก Excel" หรือ "นำเข้าจากไฟล์ FMS"</td></tr>`}</tbody>`;
   updateBulk();
 }
 function findEmp(el) { const tr = el.closest('tr[data-id]'); return tr && D.employees.find(e => e.id === tr.dataset.id); }
@@ -889,6 +918,97 @@ function bindEmp() {
       curType = p.type; document.querySelectorAll('#typeSeg button').forEach(x => x.classList.toggle('on', x.dataset.t === curType));
       touch(); renderEmp(); toast(`นำเข้า ${p.type === 'ops' ? 'Ops' : 'Driver'}: เพิ่ม ${add} คน · อัปเดต ${upd} คน (กะ วันหยุด และวันหยุดพิเศษตามไฟล์)${skipped.length ? ' · ' + skipped.join(', ') : ''}`, 6000);
     } catch (e) { toast('นำเข้าไม่สำเร็จ: ' + e.message, 5000); }
+  };
+}
+/* ---------------- employee info tab ---------------- */
+let infoMode = 'day', infoType = 'all';
+const TH_WD_FULL = ['อาทิตย์', 'จันทร์', 'อังคาร', 'พุธ', 'พฤหัสบดี', 'ศุกร์', 'เสาร์'];
+function todayIso() { const d = new Date(); return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`; }
+function thDate(iso, long) {
+  const [y, m, d] = iso.split('-').map(Number);
+  return new Date(Date.UTC(y, m - 1, d)).toLocaleDateString('th-TH', { timeZone: 'UTC', weekday: long ? 'long' : 'short', day: 'numeric', month: 'short', year: long ? 'numeric' : undefined });
+}
+function infoEmps() {
+  const q = $('#infoQ').value.trim().toLowerCase();
+  return D.employees.filter(e => e.wid.trim() && (infoType === 'all' || e.type === infoType))
+    .filter(e => !q || [e.wid, e.empId, e.name, position(e)].some(v => String(v || '').toLowerCase().includes(q)));
+}
+function workShift(v) { return String(v || '').split(',').map(x => x.trim()).find(x => x && x !== (D.settings.rdCode || 'RD') && x !== (D.settings.compCode || 'RD')) || ''; }
+function personCard(e, extra) {
+  return `<div class="pc"><b>${esc(e.name || '(ไม่มีชื่อ)')}</b>
+    <div class="meta"><span class="tag ${e.type === 'driver' ? 'd' : 'o'}">${e.type === 'driver' ? 'Driver' : 'Ops'}</span>${esc(e.wid)}${e.empId ? ' · ' + esc(e.empId) : ''}</div>
+    <div class="meta">${esc(position(e))}${extra ? ' · ' + extra : ''}</div></div>`;
+}
+function dayData(iso) {
+  const groups = {}, off = [], noShift = [];
+  infoEmps().forEach(e => {
+    if (e.startDate && iso < e.startDate) return;
+    if (e.status === 'resigned' && (!e.resignDate || iso >= e.resignDate)) return;
+    const c = cellValue(e, iso);
+    if (c.k === 'rd') { off.push(e); return; }
+    const sh = workShift(c.v);
+    if (!sh) { noShift.push(e); return; }
+    const t = shiftTime(sh); const key = t ? t.label : sh;
+    (groups[key] = groups[key] || { start: t ? t.start : '99', code: sh, list: [] }).list.push(e);
+  });
+  const sorted = Object.entries(groups).sort((a, b) => a[1].start.localeCompare(b[1].start) || a[0].localeCompare(b[0]));
+  sorted.forEach(([, g]) => g.list.sort((a, b) => a.type.localeCompare(b.type) || position(a).localeCompare(position(b)) || a.name.localeCompare(b.name, 'th')));
+  return { sorted, off, noShift };
+}
+function renderInfo() {
+  if (!$('#infoDate').value) $('#infoDate').value = todayIso();
+  $('#infoDateWrap').style.display = infoMode === 'day' ? '' : 'none';
+  const body = $('#infoBody');
+  if (!D.employees.some(e => e.wid.trim())) { body.innerHTML = `<div class="card hint" style="text-align:center;padding:30px">ยังไม่มีข้อมูลพนักงาน — นำเข้าจากไฟล์ FMS ในแท็บพนักงานก่อน</div>`; return; }
+  if (infoMode === 'day') {
+    const iso = $('#infoDate').value, { sorted, off, noShift } = dayData(iso);
+    const work = sorted.reduce((a, [, g]) => a + g.list.length, 0);
+    let h = `<div class="card"><div class="row" style="justify-content:space-between"><h2 style="margin:0">${thDate(iso, true)}</h2>
+      <div class="stat"><div><b>${work}</b>เข้างาน</div><div><b>${off.length}</b>หยุด</div>${noShift.length ? `<div><b style="color:var(--bad)">${noShift.length}</b>ไม่มีกะ</div>` : ''}</div></div></div>`;
+    sorted.forEach(([label, g]) => {
+      h += `<div class="card grp"><h3>🕖 เข้างาน ${esc(label)} <span class="chip">${g.list.length} คน</span><span class="hint">กะ ${esc(g.code)}</span></h3><div class="pcards">${g.list.map(e => personCard(e)).join('')}</div></div>`;
+    });
+    if (off.length) h += `<div class="card grp"><h3>🏖 หยุด <span class="chip">${off.length} คน</span></h3><div class="pcards">${off.map(e => personCard(e, `<span class="tag rd">${(e.comp || []).includes(iso) ? 'หยุดชดเชย' : 'หยุดประจำ'}</span>`)).join('')}</div></div>`;
+    if (noShift.length) h += `<div class="card grp"><h3 style="color:var(--bad)">⚠️ ไม่มีกะในวันนี้ <span class="chip">${noShift.length} คน</span></h3><div class="pcards">${noShift.map(e => personCard(e)).join('')}</div></div>`;
+    body.innerHTML = h;
+  } else {
+    const list = infoEmps().slice().sort((a, b) => (a.status === 'resigned') - (b.status === 'resigned') || a.type.localeCompare(b.type) || String(shiftTime(a.shift)?.start || '99').localeCompare(String(shiftTime(b.shift)?.start || '99')) || a.name.localeCompare(b.name, 'th'));
+    const rows = list.map((e, i) => { const t = shiftTime(e.shift); const comps = (e.comp || []).filter(Boolean);
+      return `<tr${e.status === 'resigned' ? ' class="resigned"' : ''}><td class="hint">${i + 1}</td><td>${esc(e.wid)}</td><td>${esc(e.empId)}</td><td><b>${esc(e.name)}</b></td><td>${esc(position(e))}</td>
+        <td><span class="tag ${e.type === 'driver' ? 'd' : 'o'}">${e.type === 'driver' ? 'Driver' : 'Ops'}</span></td>
+        <td>${t ? t.start : '-'}</td><td>${t ? t.end : '-'}</td><td>${esc(e.shift || '-')}</td>
+        <td>${e.offDays.length ? e.offDays.map(d => `<span class="tag rd">${TH_WD_FULL[d]}</span>`).join('') : '<span class="hint">-</span>'}</td>
+        <td class="hint">${comps.map(c => thDate(c)).join(', ')}</td>
+        <td>${e.status === 'resigned' ? `ลาออก ${e.resignDate ? thDate(e.resignDate) : ''}` : (e.startDate ? 'เริ่ม ' + thDate(e.startDate) : 'ทำงานอยู่')}</td></tr>`; }).join('');
+    body.innerHTML = `<div class="tblwrap"><table><thead><tr><th>#</th><th>รหัส</th><th>Employee ID</th><th>ชื่อ</th><th>ตำแหน่ง</th><th>ประเภท</th><th>เข้างาน</th><th>เลิกงาน</th><th>กะ</th><th>วันหยุดประจำ</th><th>วันหยุดชดเชย</th><th>สถานะ</th></tr></thead><tbody>${rows}</tbody></table></div>`;
+  }
+}
+function infoText() {
+  if (infoMode === 'day') {
+    const iso = $('#infoDate').value, { sorted, off, noShift } = dayData(iso);
+    const hub = (D.settings.station || '').split(' ')[0];
+    let t = `📅 ${thDate(iso, true)}${hub ? ' · ' + hub : ''}\n`;
+    sorted.forEach(([label, g]) => { t += `\n🕖 เข้างาน ${label} (${g.list.length} คน)\n` + g.list.map((e, i) => `${i + 1}. ${e.name} – ${position(e)}`).join('\n') + '\n'; });
+    if (off.length) t += `\n🏖 หยุด (${off.length} คน)\n` + off.map((e, i) => `${i + 1}. ${e.name}`).join('\n') + '\n';
+    if (noShift.length) t += `\n⚠️ ไม่มีกะ (${noShift.length} คน)\n` + noShift.map((e, i) => `${i + 1}. ${e.name}`).join('\n') + '\n';
+    return t.trim();
+  }
+  const hdr = ['รหัส', 'Employee ID', 'ชื่อ', 'ตำแหน่ง', 'ประเภท', 'เข้างาน', 'เลิกงาน', 'กะ', 'วันหยุดประจำ', 'วันหยุดชดเชย', 'สถานะ'];
+  return [hdr.join('\t'), ...infoEmps().map(e => { const t = shiftTime(e.shift); return [e.wid, e.empId, e.name, position(e), e.type === 'driver' ? 'Driver' : 'Ops', t ? t.start : '', t ? t.end : '', e.shift, e.offDays.map(d => TH_WD_FULL[d]).join(','), (e.comp || []).filter(Boolean).join(','), e.status === 'resigned' ? 'ลาออก' : 'ทำงานอยู่'].join('\t'); })].join('\n');
+}
+function showCopyBox(text) {
+  let m = document.getElementById('copyModal');
+  if (!m) { m = document.createElement('div'); m.className = 'modal'; m.id = 'copyModal'; m.innerHTML = `<div class="box"><h2>คัดลอกข้อความ</h2><p class="hint">กด Ctrl+C (Mac: Cmd+C) เพื่อคัดลอก</p><textarea class="in" style="width:100%;height:320px;font-size:13px"></textarea><div class="row" style="justify-content:flex-end;margin-top:10px"><button class="btn" data-x>ปิด</button></div></div>`; document.body.appendChild(m); m.querySelector('[data-x]').onclick = () => m.style.display = 'none'; }
+  const ta = m.querySelector('textarea'); ta.value = text; m.style.display = 'flex'; ta.focus(); ta.select();
+}
+function bindInfo() {
+  document.querySelectorAll('#infoMode button').forEach(b => b.onclick = () => { infoMode = b.dataset.m; document.querySelectorAll('#infoMode button').forEach(x => x.classList.toggle('on', x === b)); renderInfo(); });
+  document.querySelectorAll('#infoType button').forEach(b => b.onclick = () => { infoType = b.dataset.t; document.querySelectorAll('#infoType button').forEach(x => x.classList.toggle('on', x === b)); renderInfo(); });
+  $('#infoDate').onchange = renderInfo; $('#infoQ').oninput = renderInfo;
+  $('#infoCopy').onclick = async () => {
+    const text = infoText();
+    try { await navigator.clipboard.writeText(text); toast(infoMode === 'day' ? 'คัดลอกแล้ว — วางในกลุ่ม LINE ได้เลย' : 'คัดลอกแล้ว — วางใน Excel / Google Sheets ได้เลย'); }
+    catch (e) { showCopyBox(text); }
   };
 }
 /* ---------------- export tab ---------------- */
@@ -1009,15 +1129,16 @@ function bindSet() {
 function renderAll() { renderEmp(); renderSet(); if (!$('#tab-exp').classList.contains('hidden')) renderExp(); }
 document.querySelectorAll('#nav button').forEach(b => b.onclick = () => {
   document.querySelectorAll('#nav button').forEach(x => x.classList.toggle('on', x === b));
-  ['emp', 'exp', 'set'].forEach(t => $('#tab-' + t).classList.toggle('hidden', t !== b.dataset.tab));
+  ['emp', 'info', 'exp', 'set'].forEach(t => $('#tab-' + t).classList.toggle('hidden', t !== b.dataset.tab));
   if (b.dataset.tab === 'exp') { if (expType !== curType && !tpl) { expType = curType; document.querySelectorAll('#expSeg button').forEach(x => x.classList.toggle('on', x.dataset.t === expType)); } renderExp(); }
   if (b.dataset.tab === 'emp') renderEmp();
   if (b.dataset.tab === 'set') renderSet();
+  if (b.dataset.tab === 'info') renderInfo();
 });
 (async () => {
   await load();
   if (D._repaired) { const n = D._repaired; delete D._repaired; setTimeout(() => { touch(); toast(`ซ่อมข้อมูลที่คอลัมน์สลับกัน ${n} คน (กะ/Function/วันหยุด) — ตรวจอีกครั้งในแท็บพนักงาน`, 7000); }, 600); }
-  bindEmp(); bindExp(); bindSet(); renderAll();
+  bindEmp(); bindExp(); bindSet(); bindInfo(); renderAll();
   setChip(localOK() ? 'ok' : 'warn', localOK() ? '✓ พร้อมใช้งาน' : 'โหมดชั่วคราว');
   for (let i = 0; i < 40 && !(window.claude && typeof window.claude.use === 'function'); i++) await new Promise(r => setTimeout(r, 250));
   if (window.claude && typeof window.claude.use === 'function') {
