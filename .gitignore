@@ -1,0 +1,25 @@
+# --- ข้อมูลพนักงาน / ไฟล์จาก FMS: ห้าม commit ---
+*.xlsx
+*.xls
+*.csv
+wfm-shift-backup-*.json
+รายชื่อพนักงาน-*.xlsx
+backups/
+exports/
+
+# --- ความลับ ---
+.env
+.env.*
+!.env.example
+supabase/.temp/
+supabase/.branches/
+
+# --- เครื่องมือ / ระบบปฏิบัติการ ---
+node_modules/
+.DS_Store
+Thumbs.db
+desktop.ini
+.vscode/
+.idea/
+*.swp
+*.log
