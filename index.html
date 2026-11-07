@@ -220,7 +220,7 @@ a{color:var(--acc)}
 </section>
 </main>
 
-<datalist id="dlPos"><option value="พนักงานขับรถ"><option value="Hub Agent"><option value="Senior Agent"><option value="Assist. Supervisor"><option value="Hub Supervisor"></datalist><datalist id="dlShift"></datalist><datalist id="dlDept"></datalist><datalist id="dlFunc"></datalist>
+<datalist id="dlPosDrv"></datalist><datalist id="dlPosOps"></datalist><datalist id="dlShift"></datalist><datalist id="dlDept"></datalist><datalist id="dlFunc"></datalist>
 
 <div class="pop" id="pop">
   <div class="ttl" id="popTtl"></div>
@@ -790,7 +790,12 @@ async function saveFile(blob, filename) {
 }
 /* ---------------- employees tab ---------------- */
 const keepVisible = new Set();
+const POS_DRV = ['2W Shipper', '4W Shipper', '2W Shipper (Subcon Monthly)', '4W Shipper (Subcon Monthly)', '4W First Mile', '4W First Mile (PROJ)'];
+const POS_OPS = ['Hub Agent', 'Hub Agent Support', 'Senior Agent', 'Agent, Hub', 'Assistant Supervisor, Hub', 'Hub Supervisor'];
 function fillDatalists() {
+  const used = t => D.employees.filter(e => e.type === t && e.pos).map(e => e.pos);
+  $('#dlPosDrv').innerHTML = [...new Set([...POS_DRV, ...used('driver')])].map(s => `<option value="${esc(s)}">`).join('');
+  $('#dlPosOps').innerHTML = [...new Set([...POS_OPS, ...used('ops')])].map(s => `<option value="${esc(s)}">`).join('');
   const shifts = new Set([...D.employees.map(e => e.shift).filter(Boolean), ...REF.shifts]);
   $('#dlShift').innerHTML = [...shifts].map(s => `<option value="${esc(s)}">`).join('');
   const depts = new Set([...D.employees.map(e => e.dept).filter(Boolean), ...REF.depts]);
@@ -816,7 +821,7 @@ function renderEmp() {
     <td><input class="in" data-f="wid" value="${esc(e.wid)}" style="width:110px;${dup.get(e.wid.trim()) > 1 ? 'border-color:var(--bad)' : ''}" placeholder="${drv ? 'เช่น 10125' : 'เช่น Ops1234'}"></td>
     <td><input class="in" data-f="empId" value="${esc(e.empId)}" style="width:110px"></td>
     <td><input class="in" data-f="name" value="${esc(e.name)}" style="width:190px"></td>
-    <td><input class="in" data-f="pos" list="dlPos" value="${esc(e.pos || '')}" style="width:130px" placeholder="${esc(defaultPos(e))}"></td>
+    <td><input class="in" data-f="pos" list="${drv ? 'dlPosDrv' : 'dlPosOps'}" value="${esc(e.pos || '')}" style="width:130px" placeholder="${esc(defaultPos(e))}"></td>
     <td><input class="in" data-f="${drv ? 'func' : 'dept'}" list="${drv ? 'dlFunc' : 'dlDept'}" value="${esc(drv ? e.func : e.dept)}" style="width:${drv ? 140 : 190}px;${drv && e.func && !isFunc(e.func) ? 'border-color:var(--bad)' : ''}"></td>
     <td><input class="in" data-f="shift" list="dlShift" value="${esc(e.shift)}" style="width:120px;${e.shift && !isShift(e.shift) ? 'border-color:var(--bad)' : ''}" placeholder="0700-1600"></td>
     <td><div class="wd">${wdButtons(e.offDays)}</div></td>
