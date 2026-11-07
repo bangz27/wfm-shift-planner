@@ -775,7 +775,7 @@ function renderEmp() {
   const body = list.map((e, i) => `<tr data-id="${e.id}" class="${e.status === 'resigned' ? 'resigned' : ''}">
     <td class="stk"><input type="checkbox" data-sel ${selected.has(e.id) ? 'checked' : ''}></td>
     <td class="hint">${i + 1}</td>
-    <td><input class="in" data-f="wid" value="${esc(e.wid)}" style="width:110px;${dup.get(e.wid.trim()) > 1 ? 'border-color:var(--bad)' : ''}" placeholder="${drv ? 'เช่น 10125' : 'เช่น Ops1058'}"></td>
+    <td><input class="in" data-f="wid" value="${esc(e.wid)}" style="width:110px;${dup.get(e.wid.trim()) > 1 ? 'border-color:var(--bad)' : ''}" placeholder="${drv ? 'เช่น 10125' : 'เช่น Ops1234'}"></td>
     <td><input class="in" data-f="empId" value="${esc(e.empId)}" style="width:110px"></td>
     <td><input class="in" data-f="name" value="${esc(e.name)}" style="width:190px"></td>
     <td><input class="in" data-f="${drv ? 'func' : 'dept'}" list="${drv ? 'dlFunc' : 'dlDept'}" value="${esc(drv ? e.func : e.dept)}" style="width:${drv ? 140 : 190}px;${drv && e.func && !isFunc(e.func) ? 'border-color:var(--bad)' : ''}"></td>
