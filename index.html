@@ -179,7 +179,7 @@ a{color:var(--acc)}
       <label class="f" style="flex:1;min-width:260px">Publishable key (หรือ anon key)<input id="sbKey" class="in" placeholder="sb_publishable_…"></label>
       <button class="btn pri" id="sbSave">บันทึกและเชื่อมต่อ</button>
     </div>
-    <div class="row" style="margin-top:10px"><button class="btn" id="sbPush">⬆ อัปโหลดข้อมูลในเครื่องขึ้น Supabase</button><button class="btn dan" id="sbOut">ออกจากระบบ</button></div>
+    <div class="row" style="margin-top:10px"><button class="btn" id="sbPush">⬆ นำข้อมูลออฟไลน์ (ก่อนล็อกอิน) เข้าบัญชีนี้</button><button class="btn dan" id="sbOut">ออกจากระบบ</button></div>
     <p class="hint">ต้องรันไฟล์ <code>supabase/schema.sql</code> ใน SQL Editor ของโปรเจกต์ก่อน 1 ครั้ง ดูวิธีใน README</p>
   </div>
   <div class="card">
@@ -303,10 +303,16 @@ window.SB = {
       try { localStorage.setItem(SB_CFG_KEY, JSON.stringify({ url, key })); } catch (e) {}
       location.reload();
     };
-    document.getElementById('sbOut').onclick = async () => { await this.client.auth.signOut(); location.reload(); };
+    document.getElementById('sbOut').onclick = async () => {
+      try { if (this.user) localStorage.removeItem(LS_KEY + ':' + this.user.id); } catch (e) {}
+      await this.client.auth.signOut(); location.reload();
+    };
     document.getElementById('sbPush').onclick = async () => {
       if (!this.user) return toast('ยังไม่ได้เข้าสู่ระบบ Supabase');
-      try { await this.save(D); toast('อัปโหลดข้อมูลทั้งหมดขึ้น Supabase แล้ว'); } catch (e) { toast('ไม่สำเร็จ: ' + e.message, 6000); }
+      let off = null; try { off = JSON.parse(localStorage.getItem(LS_KEY) || 'null'); } catch (e) {}
+      if (!off || !(off.employees || []).length) return toast('ไม่มีข้อมูลออฟไลน์ในเบราว์เซอร์นี้');
+      if (!await askConfirm(`นำข้อมูลออฟไลน์ในเบราว์เซอร์นี้ (${off.employees.length} คน) เข้าบัญชี ${this.user.email}? ข้อมูลปัจจุบันของบัญชีนี้จะถูกแทนที่`)) return;
+      try { D = migrate(off); await this.save(D); localStorage.setItem(lsKey(), JSON.stringify(D)); localStorage.removeItem(LS_KEY); toast('นำเข้าแล้ว'); setTimeout(() => location.reload(), 800); } catch (e) { toast('ไม่สำเร็จ: ' + e.message, 6000); }
     };
     const bb = document.getElementById('sbBannerGo'); if (bb) bb.onclick = () => { document.getElementById('sbBanner').style.display = 'none'; document.querySelector('#nav button[data-tab=set]').click(); };
   }
@@ -319,6 +325,8 @@ const EN_WD = ['Sunday','Monday','Tuesday','Wednesday','Thursday','Friday','Satu
 const WARN_TXT = 'Warning: The template is prefilled with the current assignment. Please ONLY make changes to the applicable staff and do not modify the rest. \nTip: When uploading more than 20k data limit cannot exceed 3 stations, otherwise the uploading will fail. The scheduling data of an employee in one slottime is one piece of data \nReminder: if you wanna add RD and shift in the same day, please split them with comma.';
 const FMS_URL = 'https://spx.shopee.co.th/#/rosterEventPlanning/eventPlanning/list';
 const LS_KEY = 'wfm-shift-planner-v1';
+// แคชในเบราว์เซอร์แยกตามบัญชี: ห้ามใช้ข้อมูลของบัญชีอื่นหรือข้อมูลออฟไลน์ปนกับบัญชีที่ล็อกอิน
+function lsKey() { return (window.SB && SB.user) ? LS_KEY + ':' + SB.user.id : LS_KEY; }
 
 const DEFAULT_DATA = () => ({
   version: 1, savedAt: 0,
@@ -420,7 +428,7 @@ function emp(type, o = {}) {
 let saveTimer = null;
 function touch() {
   D.savedAt = Date.now();
-  try { localStorage.setItem(LS_KEY, JSON.stringify(D)); } catch (e) {}
+  try { localStorage.setItem(lsKey(), JSON.stringify(D)); } catch (e) {}
   setChip('warn', 'กำลังบันทึก…');
   clearTimeout(saveTimer); saveTimer = setTimeout(saveRemote, 2500);
 }
@@ -457,7 +465,7 @@ async function load() {
   let remote = null, local = null;
   if (window.SB) { try { if (await SB.ready()) remote = await SB.load(); } catch (e) { toast('โหลดจาก Supabase ไม่ได้: ' + e.message, 6000); } }
   else { try { const r = await fetch('data.json', { cache: 'no-store' }); if (r.ok) remote = await r.json(); } catch (e) {} }
-  try { local = JSON.parse(localStorage.getItem(LS_KEY) || 'null'); } catch (e) {}
+  try { local = JSON.parse(localStorage.getItem(lsKey()) || 'null'); } catch (e) {}
   const pick = (remote && local) ? ((local.savedAt || 0) > (remote.savedAt || 0) ? local : remote) : (remote || local);
   D = migrate(pick);
   if (pick === local && local && remote && (local.savedAt || 0) > (remote.savedAt || 0)) setTimeout(() => touch(), 1500);
