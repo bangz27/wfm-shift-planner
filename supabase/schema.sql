@@ -32,3 +32,37 @@ create policy "owner can delete" on public.wfm_planner
 revoke all on public.wfm_planner from anon;
 revoke truncate, references, trigger on public.wfm_planner from authenticated;
 grant select, insert, update, delete on public.wfm_planner to authenticated;
+
+-- ---------------------------------------------------------------
+-- จำกัดการสมัครเฉพาะอีเมลบริษัท (+ รายชื่อยกเว้นใน wfm_signup_allowlist)
+-- ---------------------------------------------------------------
+create table if not exists public.wfm_signup_allowlist (
+  email text primary key,
+  note text,
+  created_at timestamptz not null default now()
+);
+alter table public.wfm_signup_allowlist enable row level security;
+revoke all on public.wfm_signup_allowlist from anon, authenticated;
+
+create or replace function public.wfm_check_signup_email()
+returns trigger
+language plpgsql
+security definer
+set search_path = ''
+as $$
+declare
+  em text := lower(coalesce(new.email, ''));
+begin
+  if split_part(em, '@', 2) in ('spxexpress.com', 'shopee.com')
+     or exists (select 1 from public.wfm_signup_allowlist a where lower(a.email) = em) then
+    return new;
+  end if;
+  raise exception 'สมัครได้เฉพาะอีเมล @spxexpress.com หรือ @shopee.com' using errcode = 'P0001';
+end;
+$$;
+revoke execute on function public.wfm_check_signup_email() from public, anon, authenticated;
+
+drop trigger if exists wfm_check_signup_email on auth.users;
+create trigger wfm_check_signup_email
+  before insert on auth.users
+  for each row execute function public.wfm_check_signup_email();

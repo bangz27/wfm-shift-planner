@@ -220,7 +220,7 @@ a{color:var(--acc)}
   <h2>เข้าสู่ระบบ</h2>
   <p class="hint">ข้อมูลพนักงานเก็บบน Supabase และเปิดดูได้เฉพาะบัญชีที่ล็อกอิน</p>
   <div style="display:flex;flex-direction:column;gap:8px">
-    <input id="sbEmail" class="in" type="email" placeholder="อีเมล" autocomplete="username">
+    <input id="sbEmail" class="in" type="email" placeholder="อีเมลบริษัท (@spxexpress.com)" autocomplete="username">
     <input id="sbPass" class="in" type="password" placeholder="รหัสผ่าน (อย่างน้อย 6 ตัว)" autocomplete="current-password">
   </div>
   <p id="sbMsg" class="hint" style="min-height:20px"></p>
@@ -262,7 +262,8 @@ window.SB = {
     return !!this.user;
   },
   async load() {
-    const { data, error } = await this.client.from('wfm_planner').select('data, updated_at').eq('hub', this.hub()).maybeSingle();
+    // ล่าสุดของบัญชีนี้ (ไม่ผูกกับชื่อฮับเริ่มต้น เพื่อให้ฮับอื่นที่เปลี่ยน Station Name แล้วโหลดข้อมูลตัวเองได้ถูก)
+    const { data, error } = await this.client.from('wfm_planner').select('data, hub, updated_at').order('updated_at', { ascending: false }).limit(1).maybeSingle();
     if (error) throw error;
     return data ? data.data : null;
   },
@@ -280,7 +281,7 @@ window.SB = {
         if (!email || password.length < 6) return msg('กรอกอีเมล และรหัสผ่านอย่างน้อย 6 ตัว');
         msg('กำลังดำเนินการ…');
         const r = signup ? await this.client.auth.signUp({ email, password }) : await this.client.auth.signInWithPassword({ email, password });
-        if (r.error) return msg(r.error.message);
+        if (r.error) return msg(/database error saving new user/i.test(r.error.message) ? 'สมัครได้เฉพาะอีเมล @spxexpress.com หรือ @shopee.com (ติดต่อผู้ดูแลถ้าต้องใช้อีเมลอื่น)' : r.error.message);
         if (!r.data.session) return msg('สมัครแล้ว — กรุณายืนยันอีเมลในกล่องจดหมาย แล้วกด "เข้าสู่ระบบ"');
         m.style.display = 'none'; res(r.data.session.user);
       };
@@ -855,7 +856,7 @@ function bindEmp() {
     const f = ev.target.files[0]; ev.target.value = ''; if (!f) return;
     try {
       const p = parseDedicated(await readXlsx(f));
-      const rd = D.settings.rdCode || 'RD'; let add = 0, upd = 0; const skipped = [];
+      const rd = D.settings.rdCode || 'RD'; let add = 0, upd = 0; const skipped = []; const stations = {};
       p.data.forEach(r => {
         const id = normId(p.type, r[p.type === 'ops' ? 0 : 1]); if (!id) return;
         const cnt = {}, wdTot = Array(7).fill(0), wdRd = Array(7).fill(0);
@@ -868,13 +869,15 @@ function bindEmp() {
         const extra = p.dates.filter(d => String(r[d.ci] ?? '').split(',').map(x => x.trim()).includes(rd) && !offDays.includes(wdOf(d.iso))).map(d => d.iso);
         const comp = [...extra, '', '', ''].slice(0, 3);
         const patch = p.type === 'ops' ? { wid: id, name: String(r[1] ?? ''), dept: String(r[2] ?? '') } : { wid: id, empId: String(r[2] ?? ''), name: String(r[3] ?? ''), func: String(r[4] ?? '') };
-        if (p.type === 'driver' && r[0] && !D.settings.station) D.settings.station = String(r[0]);
+        if (p.type === 'driver' && r[0]) stations[String(r[0]).trim()] = (stations[String(r[0]).trim()] || 0) + 1;
         if (p.type === 'driver' && patch.func && !D.settings.functions.includes(patch.func)) D.settings.functions.push(patch.func);
         const ex = D.employees.find(e => e.type === p.type && normId(p.type, e.wid) === id);
         if (ex) { Object.keys(patch).forEach(k => { if (patch[k]) ex[k] = patch[k]; }); if (shift) ex.shift = shift; ex.offDays = offDays; if (extra.length) ex.comp = comp; repairEmp(ex); upd++; }
         else { D.employees.push(emp(p.type, Object.assign(patch, { shift, offDays, comp }))); add++; }
         if (extra.length > 3) skipped.push(`${patch.name || id}: วันหยุดเพิ่ม ${extra.length} วัน เก็บได้ 3 วัน`);
       });
+      const topSt = Object.entries(stations).sort((a, b) => b[1] - a[1])[0];
+      if (topSt && topSt[0] !== D.settings.station) { D.settings.station = topSt[0]; skipped.unshift(`ตั้ง Station เป็น ${topSt[0]}`); }
       curType = p.type; document.querySelectorAll('#typeSeg button').forEach(x => x.classList.toggle('on', x.dataset.t === curType));
       touch(); renderEmp(); toast(`นำเข้า ${p.type === 'ops' ? 'Ops' : 'Driver'}: เพิ่ม ${add} คน · อัปเดต ${upd} คน (กะ วันหยุด และวันหยุดพิเศษตามไฟล์)${skipped.length ? ' · ' + skipped.join(', ') : ''}`, 6000);
     } catch (e) { toast('นำเข้าไม่สำเร็จ: ' + e.message, 5000); }

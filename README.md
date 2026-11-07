@@ -27,6 +27,11 @@ publishable key เปิดเผยได้ เพราะตาราง `w
 
 ถ้าไม่อยากต้องกรอกค่าทุกเครื่อง ให้ใส่ค่าไว้ใน `SB_DEFAULT` ที่ด้านบนของสคริปต์ใน `index.html`
 
+## ใช้กับหลายฮับ
+- Sup ของแต่ละฮับสมัครบัญชีของตัวเอง ข้อมูลแยกกันตามบัญชี (RLS)
+- นำเข้า Template ของฮับตัวเอง แอปจะตั้ง Station Name จากไฟล์ให้อัตโนมัติ
+- สมัครได้เฉพาะอีเมล `@spxexpress.com` / `@shopee.com` ถ้าต้องการอนุญาตอีเมลอื่นเป็นรายคน ให้เพิ่มในตาราง `wfm_signup_allowlist`
+
 ## วิธีใช้งานรายเดือน
 1. ที่ FMS › Event Roster Planning เลือกแท็บ **Drivers** หรือ **Operators** › Batch Action › Upload Planned HC › Download Template แล้วเลือก Next Month
 2. ในแอป ไปที่แท็บพนักงาน › **นำเข้าจากไฟล์ FMS** เพื่ออัปเดตรายชื่อ
