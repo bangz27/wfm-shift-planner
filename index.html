@@ -119,6 +119,7 @@ a{color:var(--acc)}
       <input class="in" id="bulkShift" list="dlShift" placeholder="กะ เช่น 0800-1700" style="width:150px"><button class="btn sm" id="bulkShiftBtn">ใช้กะ</button>
       <span class="wd" id="bulkWd"></span><button class="btn sm" id="bulkWdBtn">ใช้วันหยุด</button>
       <button class="btn sm dan" id="bulkResign">ตั้งเป็นลาออก</button>
+      <button class="btn sm dan" id="bulkDelete">🗑 ลบที่เลือก</button>
       <button class="btn sm" id="bulkClear">ยกเลิกเลือก</button>
     </div>
   </div>
@@ -808,7 +809,7 @@ function renderEmp() {
   fillDatalists();
   const list = visibleEmps(), drv = curType === 'driver';
   const dup = new Map(); D.employees.filter(e => e.type === curType && e.wid.trim()).forEach(e => dup.set(e.wid.trim(), (dup.get(e.wid.trim()) || 0) + 1));
-  const head = `<thead><tr><th class="stk"><input type="checkbox" id="selAll"></th><th>#</th><th>${drv ? 'Driver ID' : 'Ops ID'}</th><th>Employee ID</th><th>ชื่อ-นามสกุล</th><th>ตำแหน่ง</th><th>${drv ? 'Function' : 'Department'}</th><th>กะทำงาน</th><th>วันหยุดประจำสัปดาห์</th><th>หยุดชดเชย 1</th><th>หยุดชดเชย 2</th><th>หยุดชดเชย 3</th><th>วันเริ่มงาน</th><th>สถานะ</th><th>วันที่ลาออก</th><th>หมายเหตุ</th><th></th></tr></thead>`;
+  const head = `<thead><tr><th class="stk"><input type="checkbox" id="selAll" title="เลือกทั้งหมดที่แสดงอยู่" ${list.length && list.every(e => selected.has(e.id)) ? 'checked' : ''}></th><th>#</th><th>${drv ? 'Driver ID' : 'Ops ID'}</th><th>Employee ID</th><th>ชื่อ-นามสกุล</th><th>ตำแหน่ง</th><th>${drv ? 'Function' : 'Department'}</th><th>กะทำงาน</th><th>วันหยุดประจำสัปดาห์</th><th>หยุดชดเชย 1</th><th>หยุดชดเชย 2</th><th>หยุดชดเชย 3</th><th>วันเริ่มงาน</th><th>สถานะ</th><th>วันที่ลาออก</th><th>หมายเหตุ</th><th></th></tr></thead>`;
   const body = list.map((e, i) => `<tr data-id="${e.id}" class="${e.status === 'resigned' ? 'resigned' : ''}">
     <td class="stk"><input type="checkbox" data-sel ${selected.has(e.id) ? 'checked' : ''}></td>
     <td class="hint">${i + 1}</td>
@@ -872,6 +873,15 @@ function bindEmp() {
   $('#bulkResign').onclick = async () => { const s = selEmps(); if (!s.length) return; if (!await askConfirm(`ตั้ง ${s.length} คนเป็น "ลาออก" ตั้งแต่วันนี้?`)) return;
     const t = new Date().toISOString().slice(0, 10); s.forEach(e => { e.status = 'resigned'; e.resignDate = e.resignDate || t; }); touch(); renderEmp(); };
   $('#bulkClear').onclick = () => { selected.clear(); renderEmp(); };
+  $('#bulkDelete').onclick = async () => {
+    const s = selEmps(); if (!s.length) return;
+    const names = s.slice(0, 5).map(e => e.name || e.wid).join(', ') + (s.length > 5 ? ` และอีก ${s.length - 5} คน` : '');
+    if (!await askConfirm(`ลบ ${s.length} คนออกจากรายชื่อถาวร? (${names})\n\nถ้าพนักงานลาออก แนะนำให้กด "ตั้งเป็นลาออก" แทน เพื่อให้ไฟล์ส่งออกลบกะเดิมใน FMS ให้`)) return;
+    const ids = new Set(s.map(e => e.id));
+    D.employees = D.employees.filter(e => !ids.has(e.id));
+    Object.keys(D.overrides).forEach(k => { if (ids.has(k.split('|')[0])) delete D.overrides[k]; });
+    ids.forEach(id => selected.delete(id)); touch(); renderEmp(); toast(`ลบแล้ว ${ids.size} คน`);
+  };
   // paste
   const cols = () => curType === 'driver' ? 'Driver ID · Employee ID · ชื่อ · Function · กะ · วันหยุด (เช่น ส,อา) · ชดเชย1 · ชดเชย2 · ชดเชย3' : 'Ops ID · Employee ID · ชื่อ · Department · กะ · วันหยุด (เช่น ส,อา) · ชดเชย1 · ชดเชย2 · ชดเชย3';
   $('#pasteBtn').onclick = () => { $('#pasteCols').innerHTML = `คอลัมน์แรกต้องเป็น<b>รหัส (${curType === 'driver' ? 'Driver ID' : 'Ops ID'})</b> ส่วนคอลัมน์อื่นเรียงแบบไหนก็ได้ ระบบจะแยกให้เองจากค่าที่วาง: ชื่อ, Employee ID (SPXTH…), ${curType === 'driver' ? 'Function (เช่น Pickup+Delivery, LH)' : 'Department'}, กะ (เช่น 0700-1600), วันหยุด (เช่น Sunday หรือ ส,อา), วันหยุดชดเชย (วันที่)<br>ตัวอย่าง: <code>${cols()}</code><br>ถ้ารหัสซ้ำกับที่มีอยู่ จะอัปเดตข้อมูลคนเดิม`; $('#pasteTxt').value = ''; $('#pasteModal').style.display = 'flex'; $('#pasteTxt').focus(); };
